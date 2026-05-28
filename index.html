@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+#root{background:#0a0000;min-height:600px;font-family:'Share Tech Mono',monospace;position:relative;overflow:hidden;cursor:text;}
+.crt-overlay{position:absolute;inset:0;pointer-events:none;z-index:50;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.09) 2px,rgba(0,0,0,0.09) 4px);}
+.crt-vignette{position:absolute;inset:0;pointer-events:none;z-index:51;background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,0.8) 100%);}
+.crt-flicker{position:absolute;inset:0;pointer-events:none;z-index:52;animation:crtflicker 0.15s steps(1) infinite;background:rgba(255,0,0,0.01);}
+@keyframes crtflicker{0%,100%{opacity:1}50%{opacity:0.97}93%{opacity:1}94%{opacity:0.55}95%{opacity:1}98%{opacity:0.85}99%{opacity:1}}
+.glitch-line{position:absolute;left:0;right:0;height:2px;background:rgba(255,0,0,0.13);animation:glitchscan 7s linear infinite;pointer-events:none;z-index:49;}
+@keyframes glitchscan{from{top:-2px;opacity:0.5}70%{opacity:0.1}to{top:100%;opacity:0}}
+.stars-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;}
+.star{position:absolute;background:rgba(180,0,0,0.4);border-radius:50%;animation:twinkle var(--d) ease-in-out infinite alternate;}
+@keyframes twinkle{from{opacity:var(--o1)}to{opacity:var(--o2)}}
+#terminal{position:relative;z-index:10;min-height:600px;padding:20px 24px;display:flex;flex-direction:column;}
+.term-topbar{display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(180,0,0,0.2);padding-bottom:10px;margin-bottom:14px;}
+.term-dot{width:10px;height:10px;border-radius:50%;}
+.term-dot.r{background:#5a0000;}.term-dot.y{background:#3a1a00;}.term-dot.g{background:#001a00;}
+.term-title{font-family:'VT323',monospace;font-size:13px;color:rgba(180,0,0,0.45);letter-spacing:0.2em;margin-left:6px;text-transform:uppercase;}
+.term-blink{animation:blinker 1.1s steps(1) infinite;}
+@keyframes blinker{0%,49%{opacity:1}50%,100%{opacity:0}}
+#output{display:flex;flex-direction:column;gap:0;flex:1;overflow-y:auto;max-height:480px;padding-right:4px;}
+#output::-webkit-scrollbar{width:3px;}#output::-webkit-scrollbar-track{background:transparent;}#output::-webkit-scrollbar-thumb{background:rgba(180,0,0,0.3);}
+.tl{font-family:'Share Tech Mono',monospace;font-size:12.5px;color:rgba(200,50,50,0.9);letter-spacing:0.03em;line-height:1.65;white-space:pre-wrap;word-break:break-word;}
+.tl.dim{color:rgba(130,20,20,0.55);font-size:11.5px;}
+.tl.bright{color:rgba(255,90,90,1);}
+.tl.white{color:rgba(210,200,200,0.82);}
+.tl.warn{color:rgba(220,130,0,0.85);}
+.tl.success{color:rgba(0,190,80,0.85);}
+.tl.sep{color:rgba(110,0,0,0.4);font-size:11px;}
+.tl.head{font-family:'VT323',monospace;font-size:20px;color:#cc0000;letter-spacing:0.15em;text-shadow:0 0 10px rgba(200,0,0,0.5);}
+.tl.indent{padding-left:18px;}
+.tl.redacted{background:rgba(180,0,0,0.07);border-left:2px solid rgba(180,0,0,0.3);padding-left:10px;}
+.tl.blue{color:rgba(80,160,255,0.85);}
+.tl.cyan{color:rgba(0,210,210,0.8);}
+.tl.yellow{color:rgba(230,210,0,0.85);}
+.input-row{display:flex;align-items:center;gap:8px;margin-top:8px;border-top:1px solid rgba(180,0,0,0.1);padding-top:8px;}
+.prompt-label{font-family:'VT323',monospace;font-size:18px;color:rgba(180,0,0,0.7);white-space:nowrap;user-select:none;}
+#cmd-input{background:transparent;border:none;outline:none;font-family:'Share Tech Mono',monospace;font-size:13px;color:rgba(220,60,60,0.95);letter-spacing:0.1em;caret-color:#cc0000;flex:1;}
+</style>
+<div id="root">
+  <div class="crt-overlay"></div><div class="crt-vignette"></div><div class="crt-flicker"></div>
+  <div class="glitch-line" style="animation-delay:0s"></div>
+  <div class="glitch-line" style="animation-delay:3.5s"></div>
+  <div class="stars-layer" id="stars"></div>
+  <div id="terminal">
+    <div class="term-topbar">
+      <div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div>
+      <span class="term-title">C.O.A — TERMINAL DE ACESSO RESTRITO v0.7.██ <span class="term-blink">█</span></span>
+    </div>
+    <div id="output"></div>
+    <div class="input-row" id="input-row" style="display:none">
+      <span class="prompt-label" id="prompt-label">root@coa-sys:~$&nbsp;</span>
+      <input id="cmd-input" type="text" maxlength="64" autocomplete="off" spellcheck="false"/>
+      <span class="term-blink" style="font-family:'VT323';font-size:18px;color:rgba(180,0,0,0.6)">█</span>
+    </div>
+  </div>
+</div>
+<script>
+const out=document.getElementById('output');
+const inputRow=document.getElementById('input-row');
+const cmdInput=document.getElementById('cmd-input');
+const promptLabel=document.getElementById('prompt-label');
+const starsEl=document.getElementById('stars');
+const root2=document.getElementById('root');
+
+for(let i=0;i<80;i++){const s=document.createElement('div');s.className='star';const sz=Math.random()*1.5+0.5;s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--o1:${(Math.random()*0.15+0.02).toFixed(2)};--o2:${(Math.random()*0.3+0.08).toFixed(2)};--d:${(Math.random()*5+2).toFixed(1)}s;animation-delay:${(Math.random()*6).toFixed(1)}s;`;starsEl.appendChild(s);}
+let mx=0,my=0,cx=0,cy=0;
+root2.addEventListener('mousemove',e=>{const r=root2.getBoundingClientRect();mx=(e.clientX-r.left)/r.width-0.5;my=(e.clientY-r.top)/r.height-0.5;});
+(function loop(){cx+=(mx-cx)*0.05;cy+=(my-cy)*0.05;starsEl.style.transform=`translate(${cx*14}px,${cy*10}px)`;requestAnimationFrame(loop);})();
+root2.addEventListener('click',()=>cmdInput.focus());
+
+// STATE
+let cwd='/';
+let hjaciaUnlocked=false;
+let history=[];
+let histIdx=-1;
+
+const FS={
+  '/':{'type':'dir','children':['documentos','sistema','logs']},
+  '/documentos':{'type':'dir','children':['pesquisa']},
+  '/documentos/pesquisa':{'type':'dir','children':['restricao.txt']},
+  '/documentos/pesquisa/restricao.txt':{'type':'file','locked':true,'key':'3424','content':`[ ARQUIVO RECUPERADO — restricao.txt ]
+Autora: Dra. Helena V.
+
+Os estudos realizados ao longo dos últimos ciclos continuam reforçando
+uma hipótese que antes parecia apenas uma possibilidade distante: o
+paranormal não se manifesta de maneira uniforme.
+
+Durante muito tempo, acreditamos que sua influência obedecia apenas à
+intensidade emocional, à presença de entidades ou à proximidade de
+eventos anômalos. Contudo, observações recentes demonstram que existem
+restrições naturais — ou talvez artificiais — impostas ao paranormal em
+determinadas regiões desta ilha.
+
+Há locais onde sua atividade se apresenta enfraquecida, limitada ou até
+parcialmente anulada. Nestes pontos, manifestações tornam-se instáveis,
+entidades aparentam perder parte de suas capacidades e fenômenos antes
+considerados inevitáveis simplesmente deixam de ocorrer com a mesma
+intensidade.
+
+Em contraste, existem setores onde nenhuma limitação perceptível parece
+existir. Nessas áreas, o paranormal se expande sem resistência
+observável. As distorções são mais agressivas, as alterações mais
+profundas e a influência sobre organismos vivos ocorre de forma
+alarmantemente eficiente.
+
+Ainda não compreendemos se tais diferenças surgiram naturalmente ou se
+representam vestígios de algo anterior à própria ocupação da ilha.
+
+O que sabemos é simples e preocupante:
+O paranormal possui fronteiras.
+E nem todas podem ser vistas.
+
+Essa descoberta altera diretamente os protocolos ligados ao PLANO.
+
+As análises conduzidas pela C.O.A confirmam que a permanência prolongada
+em ambientes de alta exposição deixa marcas persistentes. Algumas são
+físicas. Outras cognitivas. Muitas sequer podem ser identificadas com
+precisão. Mesmo quando um indivíduo aparenta estabilidade completa,
+ainda podem existir resíduos impossíveis de detectar por métodos
+convencionais.
+
+Por esse motivo, a evacuação proposta pelo PLANO seguirá uma regra
+absoluta.
+
+A única maneira de deixar esta ilha será sem qualquer vestígio
+paranormal. Nenhum resíduo. Nenhuma alteração. Nenhuma influência
+transportada para fora.
+
+A sociedade externa não pode ser exposta ao que existe aqui.
+
+Alguns consideram tais medidas excessivas. Discordo.
+
+Os indivíduos expostos tornaram-se imprevisíveis demais. Não
+necessariamente por escolha própria, mas pela própria natureza da
+contaminação anômala. São perigos que não podem ser medidos apenas por
+aparência, comportamento ou intenção declarada.
+
+Caso os envolvidos cooperem, os protocolos de limpeza e contenção
+serão executados conforme planejado.
+
+Caso não cooperem no dia do PLANO, medidas definitivas deverão ser
+autorizadas.
+
+A execução destes indivíduos não é tratada como punição.
+É contenção.
+
+Registro isto não com satisfação, mas com convicção científica.
+São perigosos demais para viverem em sociedade carregando aquilo que
+esta ilha colocou dentro deles.
+
+Talvez, no futuro, descubram que estivemos errados.
+Mas se estivermos certos, não haverá futuro suficiente para corrigir
+o erro.
+
+— Dra. Helena V.
+   Setor de Pesquisa Anômala | C.O.A`},
+  '/sistema':{'type':'dir','children':['kernel.log','config.sys']},
+  '/sistema/kernel.log':{'type':'file','locked':false,'content':`[SYS] KERNEL C.O.A v0.7 — LOG DE INICIALIZAÇÃO
+[0.001] Módulo de contenção: ATIVO
+[0.034] Interface anômala: CONECTADA
+[0.102] Partição /documentos: MONTADA
+[0.219] WARN: 34% de integridade do sistema
+[0.300] WARN: Setores corrompidos detectados em /mem/blk3
+[0.441] Autenticação de dois fatores: EXIGIDA
+[0.500] Sistema pronto. Sessão iniciada.`},
+  '/sistema/config.sys':{'type':'file','locked':false,'content':`# CONFIGURAÇÃO DO SISTEMA C.O.A
+VERSAO=0.7.██
+MODO=RESTRICAO_TOTAL
+AUTH_NIVEL=2
+CRIPTOGRAFIA=AES-██
+TIMEOUT_SESSAO=600
+LOG_ACESSO=true
+CONTENCAO=ATIVA
+REGIAO=ILHA_SETOR_7`},
+  '/logs':{'type':'dir','children':['acesso.log','anomalia.log']},
+  '/logs/acesso.log':{'type':'file','locked':false,'content':`[LOG DE ACESSOS — C.O.A]
+2024-██-██ 03:14:22 | USER:desconhecido | TENTATIVA NEGADA
+2024-██-██ 07:45:01 | USER:dra.helena   | ACESSO CONCEDIDO
+2024-██-██ 09:12:44 | USER:████████     | ACESSO CONCEDIDO
+2024-██-██ 11:30:07 | USER:desconhecido | TENTATIVA NEGADA
+2024-██-██ 18:02:55 | USER:adm.coa      | ACESSO CONCEDIDO
+2024-██-██ 23:59:59 | USER:░░░░░░░░     | [REGISTRO CORROMPIDO]`},
+  '/logs/anomalia.log':{'type':'file','locked':false,'content':`[REGISTRO DE ANOMALIAS — SETOR 7]
+#0041 — Distorção espacial leve. Duração: 3min. Causa: desconhecida.
+#0042 — Entidade catalogada. Nível: MENOR. Status: CONTIDA.
+#0043 — Falha em protocolo de contenção. Área B-7. RESOLVIDA.
+#0044 — Oscilação paranormal acima do limiar. Monitorando.
+#0045 — ████████████████████████████ [CENSURADO]
+#0046 — Experimento #03 concluído. Resultado: INESPERADO.
+#0047 — [ARQUIVO CORROMPIDO — RECUPERAÇÃO NECESSÁRIA]`}
+};
+
+function resolvePath(p){
+  if(p.startsWith('/'))return p.replace(/\/+$/,'').replace(/\/+/g,'/')||'/';
+  let parts=(cwd==='/'?'':cwd).split('/').filter(Boolean);
+  p.split('/').forEach(seg=>{if(seg==='..')parts.pop();else if(seg&&seg!=='.')parts.push(seg);});
+  return '/'+parts.join('/')||'/';
+}
+
+function line(txt,cls='',delay=0){
+  return new Promise(r=>{setTimeout(()=>{
+    const d=document.createElement('div');d.className='tl '+(cls||'');
+    d.textContent=txt||'';if(!txt)d.innerHTML='&nbsp;';
+    out.appendChild(d);out.scrollTop=out.scrollHeight;r();
+  },delay);});
+}
+function lines(arr,baseDelay=0,gap=18){
+  let p=Promise.resolve();
+  arr.forEach(([t,c],i)=>{p=p.then(()=>line(t,c,i===0?baseDelay:gap));});
+  return p;
+}
+function sep(){return line('─'.repeat(52),'sep');}
+
+const HELP_TEXT=[
+  ['',''],
+  ['  COMANDOS DISPONÍVEIS — C.O.A TERMINAL','head'],
+  ['─'.repeat(52),'sep'],
+  ['  NAVEGAÇÃO','bright'],
+  ['  ls               Lista arquivos e pastas','white'],
+  ['  ls -a            Lista com detalhes ocultos','white'],
+  ['  cd <pasta>       Entra em uma pasta','white'],
+  ['  cd ..            Volta uma pasta','white'],
+  ['  pwd              Mostra caminho atual','white'],
+  ['',''],
+  ['  ARQUIVOS','bright'],
+  ['  cat <arquivo>    Lê um arquivo de texto','white'],
+  ['  file <arquivo>   Exibe tipo e info do arquivo','white'],
+  ['  find <nome>      Busca arquivo no sistema','white'],
+  ['',''],
+  ['  RECUPERAÇÃO','bright'],
+  ['  rec <chave>      Recupera arquivo bloqueado','white'],
+  ['                   (insira a chave do arquivo)','dim'],
+  ['',''],
+  ['  SISTEMA','bright'],
+  ['  whoami           Exibe usuário atual','white'],
+  ['  date             Data e hora do sistema','white'],
+  ['  uptime           Tempo de sessão ativa','white'],
+  ['  uname            Info do sistema operacional','white'],
+  ['  ps               Processos ativos','white'],
+  ['  ping <host>      Testa conexão com host','white'],
+  ['  decrypt <txt>    Tenta decriptar string','white'],
+  ['  clear            Limpa o terminal','white'],
+  ['  history          Exibe histórico de comandos','white'],
+  ['',''],
+  ['  ACESSO','bright'],
+  ['  HJÁCIA           Autenticação nível 1','white'],
+  ['  oesoss           Autenticação nível 2 (requer HJÁCIA)','white'],
+  ['─'.repeat(52),'sep'],
+  ['',''],
+];
+
+const sessionStart=Date.now();
+
+async function runCmd(raw){
+  const trimmed=raw.trim();
+  if(!trimmed)return;
+  history.unshift(trimmed);histIdx=-1;
+  await line(`${getPrompt()}${trimmed}`,'dim');
+
+  const [cmd,...args]=trimmed.split(/\s+/);
+  const arg=args.join(' ');
+
+  if(cmd==='clear'){out.innerHTML='';return;}
+
+  if(cmd==='help'||cmd==='--help'){await lines(HELP_TEXT,0,12);return;}
+
+  if(cmd==='pwd'){await line(`  ${cwd}`,'white');return;}
+
+  if(cmd==='whoami'){
+    await line('  root','bright');
+    await line('  Grupos: coa-admin, pesquisa, contencao','dim');
+    return;
+  }
+
+  if(cmd==='date'){
+    const now=new Date();
+    await line(`  ${now.toLocaleString('pt-BR')} [HORA DO SISTEMA — SETOR 7]`,'white');
+    return;
+  }
+
+  if(cmd==='uptime'){
+    const s=Math.floor((Date.now()-sessionStart)/1000);
+    const m=Math.floor(s/60),sec=s%60;
+    await line(`  Sessão ativa há ${m}m ${sec}s — Carga: ██.█% — Integridade: 34%`,'white');
+    return;
+  }
+
+  if(cmd==='uname'){
+    await lines([
+      ['  Sistema: C.O.A-OS v0.7.██','white'],
+      ['  Kernel: anomalous-core-3.14','white'],
+      ['  Arquitetura: ARC-7 (64-bit corrompido)','white'],
+      ['  Hostname: coa-srv-setor7','white'],
+    ]);
+    return;
+  }
+
+  if(cmd==='ps'){
+    await lines([
+      ['  PID    PROCESSO               STATUS','bright'],
+      ['  001    contencao.daemon       ATIVO','success'],
+      ['  002    monitoramento.sys      ATIVO','success'],
+      ['  003    criptografia.mod       ATIVO','success'],
+      ['  004    anomalia.watcher       ATIVO','warn'],
+      ['  005    ██████████.exe         [PROCESSO OCULTO]','warn'],
+      ['  006    mem.corrompida         CRÍTICO',''],
+    ]);
+    return;
+  }
+
+  if(cmd==='history'){
+    if(history.length<=1){await line('  Sem histórico.','dim');return;}
+    history.slice(1).forEach(async(h,i)=>{await line(`  ${i+1}  ${h}`,'white');});
+    return;
+  }
+
+  if(cmd==='ping'){
+    if(!arg){await line('  Uso: ping <host>','warn');return;}
+    await line(`  PING ${arg}...`,'white');
+    await line('  Conectando...','dim');
+    setTimeout(async()=>{
+      if(arg.includes('coa')||arg.includes('local')){
+        await line(`  64 bytes de ${arg}: tempo=██ms TTL=64`,'success');
+        await line(`  64 bytes de ${arg}: tempo=██ms TTL=64`,'success');
+        await line('  [CONEXÃO ESTABELECIDA]','success');
+      } else {
+        await line('  Tempo esgotado. Host inacessível.','warn');
+        await line('  [FIREWALL C.O.A BLOQUEOU REQUISIÇÃO]','');
+      }
+    },600);
+    return;
+  }
+
+  if(cmd==='decrypt'){
+    if(!arg){await line('  Uso: decrypt <string>','warn');return;}
+    await line('  Iniciando decriptação...','dim');
+    setTimeout(async()=>{
+      await line('  [██] Tentando chave AES-256...','dim');
+      setTimeout(async()=>{
+        await line('  [FALHA] Chave primária rejeitada.','warn');
+        await line('  [██] Tentando protocolo anômalo-7...','dim');
+        setTimeout(async()=>{
+          await line('  [FALHA] Arquivo pode estar além da criptografia convencional.','');
+          await line('  Resultado: ░░░░░░░░░░░░░░░░░░░░','dim');
+        },700);
+      },500);
+    },400);
+    return;
+  }
+
+  if(cmd==='ls'){
+    const node=FS[cwd];
+    if(!node||node.type!=='dir'){await line('  Diretório inválido.','warn');return;}
+    const showHidden=arg==='-a';
+    await line(`  Conteúdo de ${cwd}:`,'dim');
+    for(const child of node.children){
+      const fullPath=(cwd==='/'?'':cwd)+'/'+child;
+      const childNode=FS[fullPath];
+      if(!childNode)continue;
+      const isDir=childNode.type==='dir';
+      const locked=childNode.locked?' [BLOQUEADO]':'';
+      const cls=isDir?'cyan':'white';
+      const prefix=isDir?'📁 ':'📄 ';
+      await line(`  ${prefix}${child}${locked}`,cls);
+      if(showHidden&&!isDir&&childNode.locked){
+        await line(`       chave necessária para acesso`,'dim');
+      }
+    }
+    return;
+  }
+
+  if(cmd==='cd'){
+    if(!arg||arg==='.'){return;}
+    let target;
+    if(arg==='..'){
+      if(cwd==='/'){await line('  Já está no diretório raiz.','dim');return;}
+      const parts=cwd.split('/').filter(Boolean);parts.pop();
+      target='/'+parts.join('/');if(!target)target='/';
+    } else {
+      target=resolvePath(arg);
+    }
+    if(!FS[target]||FS[target].type!=='dir'){await line(`  cd: ${arg}: pasta não encontrada`,'warn');return;}
+    cwd=target;
+    promptLabel.textContent=`root@coa-sys:${cwd}$ `;
+    return;
+  }
+
+  if(cmd==='cat'){
+    if(!arg){await line('  Uso: cat <arquivo>','warn');return;}
+    const fullPath=resolvePath(arg);
+    const node=FS[fullPath];
+    if(!node){await line(`  cat: ${arg}: arquivo não encontrado`,'warn');return;}
+    if(node.type==='dir'){await line(`  cat: ${arg}: é um diretório`,'warn');return;}
+    if(node.locked){
+      await line(`  [ACESSO NEGADO] — ${arg} está bloqueado.`,'');
+      await line(`  Use: rec <chave> para recuperar este arquivo.`,'dim');
+      return;
+    }
+    await sep();
+    const contentLines=node.content.split('\n');
+    for(const l of contentLines)await line(l||' ','white');
+    await sep();
+    return;
+  }
+
+  if(cmd==='file'){
+    if(!arg){await line('  Uso: file <arquivo>','warn');return;}
+    const fullPath=resolvePath(arg);
+    const node=FS[fullPath];
+    if(!node){await line(`  file: ${arg}: não encontrado`,'warn');return;}
+    if(node.type==='dir'){await line(`  ${arg}: diretório — C.O.A filesystem`,'cyan');return;}
+    const status=node.locked?'BLOQUEADO — chave necessária':'texto simples';
+    await line(`  ${arg}: arquivo de texto — ${status}`,'white');
+    return;
+  }
+
+  if(cmd==='find'){
+    if(!arg){await line('  Uso: find <nome>','warn');return;}
+    await line(`  Buscando "${arg}" no sistema...`,'dim');
+    const results=Object.keys(FS).filter(k=>k.toLowerCase().includes(arg.toLowerCase())&&FS[k].type!=='dir');
+    if(results.length===0){await line('  Nenhum arquivo encontrado.','warn');return;}
+    results.forEach(async r=>{
+      const n=FS[r];
+      await line(`  ${r}${n.locked?' [BLOQUEADO]':''}`,'white');
+    });
+    return;
+  }
+
+  if(cmd==='rec'){
+    if(!arg){
+      await line('  Uso: rec <chave>','warn');
+      await line('  Recupera arquivos bloqueados usando a chave de acesso.','dim');
+      return;
+    }
+    // find locked file in current dir or whole fs
+    const locked=Object.entries(FS).find(([,v])=>v.type==='file'&&v.locked&&v.key===arg);
+    if(!locked){
+      await line('  [FALHA] Chave inválida ou nenhum arquivo corresponde.','warn');
+      await line('  Tentativa registrada.','dim');
+      return;
+    }
+    const [path,node]=locked;
+    await line('  Iniciando protocolo de recuperação...','dim');
+    await line('  [██████░░░░] Verificando integridade...','dim');
+    setTimeout(async()=>{
+      await line('  [██████████] Chave aceita.','success');
+      await line(`  Arquivo desbloqueado: ${path}`,'success');
+      setTimeout(async()=>{
+        await sep();
+        const contentLines=node.content.split('\n');
+        for(const l of contentLines)await line(l||' ','white');
+        await sep();
+        node.locked=false;
+      },500);
+    },800);
+    return;
+  }
+
+  // HJÁCIA auth
+  if(trimmed==='HJÁCIA'){
+    hjaciaUnlocked=true;
+    await line('  Autenticando...','dim');
+    await line('  [OK] CREDENCIAL ACEITA — NÍVEL 1','success');
+    await line('  Carregando comunicado...','dim');
+    setTimeout(async()=>{
+      await lines([
+        ['─'.repeat(52),'sep'],
+        ['  [ COMUNICADO INTERNO — C.O.A ]','head'],
+        ['─'.repeat(52),'sep'],
+        ['',''],
+        ['  Os registros mais recentes confirmam aquilo que muitos temiam.','white'],
+        ['',''],
+        ['  Novas criaturas foram catalogadas e introduzidas aos protocolos.','white indent'],
+        ['  O equilíbrio do mundo sofreu mais uma ruptura silenciosa.','white indent'],
+        ['',''],
+        ['  [AVISO] Distorções menores. Presenças. Alterações na realidade.','warn redacted'],
+        ['',''],
+        ['  O mundo encontra-se mais instável. Mais imprevisível.','white indent'],
+        ['  Quando os sinais parecem menores, já é tarde demais.','white indent'],
+        ['',''],
+        ['─'.repeat(52),'sep'],
+        ['  C.O.A | DEPT. DE OBSERVAÇÃO E CONTENÇÃO ANÔMALA','dim'],
+        ['─'.repeat(52),'sep'],
+        ['',''],
+      ],0,14);
+    },600);
+    return;
+  }
+
+  // oesoss auth
+  if(trimmed==='oesoss'){
+    if(!hjaciaUnlocked){
+      await line('  [ERRO] Protocolo de autorização incompleto.','warn');
+      await line('  Execute autenticação primária antes de prosseguir.','dim');
+      return;
+    }
+    await line('  Autenticando...','dim');
+    await line('  [OK] CREDENCIAL ACEITA — NÍVEL 2 CLASSIFICADO','success');
+    setTimeout(async()=>{
+      await lines([
+        ['─'.repeat(52),'sep'],
+        ['  [ REGISTRO OFICIAL — C.O.A | DIV. PESQUISA ANÔMALA ]','head'],
+        ['─'.repeat(52),'sep'],
+        ['',''],
+        ['  EXPERIMENTO #01 — STATUS: ESTÁVEL','success'],
+        ['  Transformação em criatura semelhante a lagarto. Controlado.','white indent'],
+        ['',''],
+        ['  EXPERIMENTO #02 — STATUS: MONITORADO','warn'],
+        ['  Características felinas. Colorações anômalas. Oscilações.','white indent'],
+        ['',''],
+        ['  EXPERIMENTO #03 — STATUS: ██████','bright redacted'],
+        ['  Modificações aquáticas. O experimento deu certo.','white indent'],
+        ['  Compatibilidade inesperada com o paranormal detectada.','white indent'],
+        ['',''],
+        ['  [!] NOVAS ALMAS ANUNCIADAS HOJE, 18:30','bright'],
+        ['',''],
+        ['─'.repeat(52),'sep'],
+        ['  C.O.A | SETOR DE DESENVOLVIMENTO E CONTENÇÃO EXPERIMENTAL','dim'],
+        ['─'.repeat(52),'sep'],
+        ['',''],
+      ],0,14);
+    },500);
+    return;
+  }
+
+  await line(`  comando não encontrado: ${cmd} — tente 'help'`,'warn');
+}
+
+function getPrompt(){return `root@coa-sys:${cwd}$ `;}
+
+// Boot sequence
+const bootLines=[
+  [0,'[  0.000] BIOS: OMNITECH-C.O.A REV 7.2.1 — INICIALIZANDO...','dim'],
+  [160,'[  0.183] CPU: ARC-7 ANOMALOUS RESEARCH CORE — OK','dim'],
+  [300,'[  0.321] MEM: 4096MB ECC — VERIFICANDO...','dim'],
+  [460,'[  0.499] MEM: ████ SETORES CORROMPIDOS DETECTADOS','warn'],
+  [620,'[  0.680] DISK: /dev/coa0 — MONTANDO PARTIÇÃO RESTRITA','dim'],
+  [780,'[  0.819] NET:  LINK ESTABELECIDO [██.██.██.██]','dim'],
+  [940,'[  1.001] SYS: CARREGANDO KERNEL C.O.A...','dim'],
+  [1150,'[  1.302] WARN: INTEGRIDADE DO SISTEMA COMPROMETIDA — 34%','warn'],
+  [1350,'[  1.551] CRIPT: MÓDULO DE CONTENÇÃO ATIVO','dim'],
+  [1600,'[  1.901] BOOT COMPLETO. SESSÃO INICIADA.','success'],
+  [1800,'─'.repeat(52),'sep'],
+  [1950,'  SISTEMA DE AUTENTICAÇÃO — C.O.A v0.7','bright'],
+  [2100,'  Digite  help  para ver comandos disponíveis.','dim'],
+  [2250,'─'.repeat(52),'sep'],
+  [2400,'',''],
+];
+bootLines.forEach(([t,txt,cls])=>setTimeout(()=>line(txt,cls),t));
+setTimeout(()=>{inputRow.style.display='flex';cmdInput.focus();},2600);
+
+cmdInput.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const v=cmdInput.value;cmdInput.value='';runCmd(v);}
+  else if(e.key==='ArrowUp'){e.preventDefault();if(histIdx<history.length-1){histIdx++;cmdInput.value=history[histIdx]||'';}}
+  else if(e.key==='ArrowDown'){e.preventDefault();if(histIdx>0){histIdx--;cmdInput.value=history[histIdx]||'';}else{histIdx=-1;cmdInput.value='';}}
+});
+</script>
